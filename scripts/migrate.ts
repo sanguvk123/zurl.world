@@ -94,9 +94,62 @@ function redact(url: string): string {
   return url.replace(/\/\/[^@]*@/, '//***:***@');
 }
 
+/**
+ * Prints the actual reason a migration failed.
+ *
+ * Drizzle wraps driver errors, so `error.message` is the SQL that was being
+ * run — not why it failed. The useful part (authentication failed, connection
+ * timeout, permission denied) is on `error.cause`. Printing only the wrapper
+ * makes every failure look identical and tells the reader nothing.
+ */
+function describeFailure(error: unknown): string {
+  const lines: string[] = [];
+  const top = error instanceof Error ? error : new Error(String(error));
+
+  const cause = (top as { cause?: unknown }).cause;
+  const real = cause instanceof Error ? cause : null;
+  const detail = real as (Error & { code?: string; severity?: string }) | null;
+
+  lines.push(real ? real.message : top.message);
+
+  if (detail?.code) lines.push(`  code: ${detail.code}`);
+
+  const hint = hintFor(detail?.code, real?.message ?? top.message);
+  if (hint) lines.push(`\n${hint}`);
+
+  return lines.join('\n');
+}
+
+/** Maps the failures that actually happen during a first deploy to next steps. */
+function hintFor(code: string | undefined, message: string): string | null {
+  if (code === '28P01' || /password authentication failed/i.test(message)) {
+    return 'The password is wrong. If you rotated it, copy the new connection string from Vercel > Storage > ".env.local".';
+  }
+  if (code === '3D000') {
+    return 'That database does not exist on the server. Check the name after the final "/".';
+  }
+  if (code === '42501') {
+    return 'This role cannot create tables. Use the owner role (neondb_owner on Neon).';
+  }
+  if (/timeout/i.test(message)) {
+    return [
+      'The server never completed the connection.',
+      '  - On a corporate or VPN network, outbound Postgres (5432) is often blocked. Try another network.',
+      '  - Neon free-tier databases sleep when idle; the first attempt can time out. Try once more.',
+    ].join('\n');
+  }
+  if (/ENOTFOUND|EAI_AGAIN/i.test(message)) {
+    return 'The host could not be resolved. Check for a typo in the hostname.';
+  }
+  if (/self.signed|certificate/i.test(message)) {
+    return 'TLS verification failed, which usually means something is intercepting the connection (corporate proxy).';
+  }
+  return null;
+}
+
 main()
   .then(() => process.exit(0))
   .catch((error: unknown) => {
-    console.error('Migration failed:', error instanceof Error ? error.message : error);
+    console.error('Migration failed:', describeFailure(error));
     process.exit(1);
   });
