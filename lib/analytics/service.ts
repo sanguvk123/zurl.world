@@ -108,13 +108,22 @@ export async function getLinkAnalytics(linkId: string, days = 30): Promise<LinkA
         .where(scope),
       db
         .select({
-          date: sql<string>`to_char(date_trunc('day', ${clickEvents.timestamp}), 'YYYY-MM-DD')`,
+          /*
+           * Bucket explicitly in UTC.
+           *
+           * `date_trunc` without a zone uses the session timezone, while the
+           * padding below is built in UTC. On any server not set to UTC the two
+           * disagree, and the most recent day silently drops off the chart.
+           * Pinning both to UTC also keeps the series stable regardless of
+           * where the query runs.
+           */
+          date: sql<string>`to_char(date_trunc('day', ${clickEvents.timestamp} AT TIME ZONE 'UTC'), 'YYYY-MM-DD')`,
           clicks: sql<number>`count(*)::int`,
         })
         .from(clickEvents)
         .where(scope)
-        .groupBy(sql`date_trunc('day', ${clickEvents.timestamp})`)
-        .orderBy(sql`date_trunc('day', ${clickEvents.timestamp})`),
+        .groupBy(sql`date_trunc('day', ${clickEvents.timestamp} AT TIME ZONE 'UTC')`)
+        .orderBy(sql`date_trunc('day', ${clickEvents.timestamp} AT TIME ZONE 'UTC')`),
       breakdown(db, scope, clickEvents.country),
       breakdown(db, scope, clickEvents.referrerHost),
       breakdown(db, scope, clickEvents.deviceType),

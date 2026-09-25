@@ -143,6 +143,26 @@ describe('time series', () => {
     expect(analytics.series.filter((p) => p.clicks === 0)).toHaveLength(5);
   });
 
+  it("includes today's clicks regardless of the server timezone", async () => {
+    /*
+     * Regression: the SQL grouped by `date_trunc('day', timestamp)`, which uses
+     * the session timezone, while the padding was generated in UTC. On a server
+     * ahead of UTC a click made today was bucketed to tomorrow's date, which
+     * did not exist in the padded range, so it vanished from the chart — the
+     * most visible data point silently missing.
+     */
+    const linkId = await makeLink();
+    await insertClick(linkId, { daysAgo: 0 });
+
+    const analytics = await getLinkAnalytics(linkId, 7);
+    const today = new Date().toISOString().slice(0, 10);
+    const todayPoint = analytics.series.find((p) => p.date === today);
+
+    expect(todayPoint, `expected a point for ${today}`).toBeDefined();
+    expect(todayPoint?.clicks).toBe(1);
+    expect(analytics.series.reduce((sum, p) => sum + p.clicks, 0)).toBe(1);
+  });
+
   it('groups multiple clicks on the same day into one point', async () => {
     const linkId = await makeLink();
     await insertClick(linkId, { daysAgo: 1 });
