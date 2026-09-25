@@ -48,6 +48,23 @@ export async function getDb(): Promise<Database> {
 
   const url = process.env.DATABASE_URL;
 
+  /*
+   * Refuse to start a production deployment on an ephemeral database.
+   *
+   * Falling back to PGlite is the right behaviour locally, but on a serverless
+   * platform it is silently catastrophic: each instance would get its own empty
+   * in-memory database, every link would disappear between requests, and
+   * nothing would appear in the logs to explain why. Failing loudly at the
+   * first query is far cheaper than debugging that in production.
+   */
+  if (process.env.NODE_ENV === 'production' && shouldUsePglite(url)) {
+    throw new Error(
+      'DATABASE_URL must be set to a PostgreSQL connection string in production. ' +
+        'Refusing to start with an in-process database, which would lose all data ' +
+        'between requests.',
+    );
+  }
+
   if (shouldUsePglite(url)) {
     const { PGlite } = await import('@electric-sql/pglite');
     const { drizzle: drizzlePglite } = await import('drizzle-orm/pglite');
