@@ -39,21 +39,53 @@ async function main(): Promise<void> {
 function assertUsableDatabaseUrl(url: string | undefined): void {
   if (!url) return; // Falls back to PGlite, which is valid for local work.
 
-  const looksLikePlaceholder = /^<.*>$/.test(url.trim()) || url.includes('<') || url.includes('>');
-  if (looksLikePlaceholder) {
+  const example =
+    '  DATABASE_URL="postgresql://user:password@host.neon.tech/dbname?sslmode=require" npm run db:migrate';
+
+  // Angle brackets, ellipses and the literal words from documentation examples.
+  const placeholderPattern = /[<>]|\.\.\.|paste |your-|yours|example\.com|xxxxx/i;
+  if (placeholderPattern.test(url)) {
     throw new Error(
-      `DATABASE_URL is still a placeholder (${url}). Replace it with the real ` +
-        'connection string, including the quotes:\n' +
-        '  DATABASE_URL="postgresql://user:password@host/db?sslmode=require" npm run db:migrate',
+      `DATABASE_URL still contains example text (${redact(url)}).\n` +
+        'Copy the real value from Vercel > Storage > your database > ".env.local" tab.\n' +
+        example,
     );
   }
 
-  const valid = /^(postgres(ql)?:\/\/|pglite:|memory:\/\/)/.test(url);
-  if (!valid) {
+  if (!/^(postgres(ql)?:\/\/|pglite:|memory:\/\/)/.test(url)) {
     throw new Error(
-      `DATABASE_URL is not a recognised connection string (${redact(url)}). ` +
-        'Expected it to start with postgresql://, pglite: or memory://',
+      `DATABASE_URL is not a recognised connection string (${redact(url)}).\n` +
+        'Expected it to start with postgresql://, pglite: or memory://\n' +
+        example,
     );
+  }
+
+  // A prefix check is not enough: `postgresql://user:...` parses as a URL with
+  // an empty host, which the driver silently treats as a local socket and then
+  // fails deep inside Postgres with an unrelated message.
+  if (url.startsWith('postgres')) {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error(`DATABASE_URL is not a valid URL (${redact(url)}).\n${example}`);
+    }
+
+    if (!parsed.hostname) {
+      throw new Error(
+        `DATABASE_URL has no host (${redact(url)}).\n` +
+          'A Neon string looks like postgresql://user:password@ep-something.aws.neon.tech/neondb?sslmode=require\n' +
+          example,
+      );
+    }
+
+    if (!parsed.pathname || parsed.pathname === '/') {
+      throw new Error(
+        `DATABASE_URL has no database name (${redact(url)}).\n` +
+          'Expected a path after the host, for example .../neondb?sslmode=require\n' +
+          example,
+      );
+    }
   }
 }
 
