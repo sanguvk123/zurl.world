@@ -67,15 +67,33 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const result = await createLink({
-    destinationUrl: parsed.data.url,
-    alias: parsed.data.alias,
-    title: parsed.data.title,
-    password: parsed.data.password,
-    expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : undefined,
-    userId: user?.id,
-    creatorIpHash: ipHash,
-  });
+  /*
+   * A thrown error here (database unreachable, misconfigured connection
+   * string) would otherwise escape the handler and the platform would return
+   * an empty body with no status the client can act on. Convert it into a
+   * real 503 and log the cause, so a misconfigured deployment is diagnosable
+   * from the response alone rather than only from the platform logs.
+   */
+  let result: Awaited<ReturnType<typeof createLink>>;
+  try {
+    result = await createLink({
+      destinationUrl: parsed.data.url,
+      alias: parsed.data.alias,
+      title: parsed.data.title,
+      password: parsed.data.password,
+      expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : undefined,
+      userId: user?.id,
+      creatorIpHash: ipHash,
+    });
+  } catch (error) {
+    logger.error('link.create_failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return apiError(
+      'service_unavailable',
+      'Unable to create a link right now. Please try again shortly.',
+    );
+  }
 
   if (!result.ok) {
     const { error } = result;

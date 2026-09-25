@@ -21,7 +21,9 @@ export type ApiErrorCode =
   | 'not_found'
   | 'method_not_allowed'
   | 'payload_too_large'
-  | 'internal_error';
+  | 'internal_error'
+  /** Dependency (usually the database) is unreachable. Retryable. */
+  | 'service_unavailable';
 
 const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   validation_error: 400,
@@ -35,6 +37,7 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   method_not_allowed: 405,
   payload_too_large: 413,
   internal_error: 500,
+  service_unavailable: 503,
 };
 
 export function apiSuccess<T>(data: T, init?: { status?: number; headers?: HeadersInit }) {
