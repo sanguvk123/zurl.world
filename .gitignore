@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+.next/
+out/
+build/
+dist/
+
+# Local database (PGlite)
+.data/
+
+# Environment — never commit real secrets
+.env
+.env.local
+.env*.local
+.env.development
+.env.production
+
+# Testing
+coverage/
+.vitest/
+
+# Scratch work
+.scratch/
+
+# Editors and OS
+.DS_Store
+*.pem
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Vercel
+.vercel
